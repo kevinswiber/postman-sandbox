@@ -198,7 +198,7 @@ describe('promises inside sandbox', function () {
         });
     });
 
-    it.skip('throw an error on a rejected, uncaught Promise', function (done) {
+    it('throw an error on a rejected, uncaught Promise', function (done) {
         Sandbox.createContext({ debug: true }, function (err, ctx) {
             if (err) { return done(err); }
 
@@ -238,7 +238,47 @@ describe('promises inside sandbox', function () {
         });
     });
 
-    it('runs multiple consecutive Promises', function (done) {
+    it('runs multiple consecutive Promises when an async function executes in a microtask queue', function (done) {
+        Sandbox.createContext({ debug: true }, function (err, ctx) {
+            if (err) { return done(err); }
+            let assertions = [];
+
+            var executionError = sinon.spy();
+
+            ctx.on('execution.error', executionError);
+            ctx.on('execution.assertion', function (cursor, results) {
+                assertions = assertions.concat(results);
+            });
+
+            ctx.execute(`"use sandbox2";
+const foo = () => new Promise((resolve) => {
+  console.log('foo');
+  setTimeout(resolve, 200);
+});
+
+const bar = () => new Promise((resolve) => {
+  console.log('bar');
+  resolve();
+});
+
+const baz = () => new Promise((resolve) => {
+  console.log('baz');
+  resolve();
+});
+
+Promise.resolve()
+  .then(() => foo())
+  .then(() => bar())
+  .then(() => baz());
+            `, function (err) {
+                if (err) { return done(err); }
+
+                expect(executionError).to.not.have.been.called;
+                done();
+            });
+        });
+    });
+    it(' async await runs multiple consecutive async Promises', function (done) {
         Sandbox.createContext({ debug: true }, function (err, ctx) {
             if (err) { return done(err); }
 
@@ -258,9 +298,12 @@ var promiseMethod = function(text) {
    return promise;
 };
 
-promiseMethod('first')
-   .then((v) => {return promiseMethod('second');})
-   .then((v) => {return promiseMethod('third');})
+(async function main() {
+    await promiseMethod("first");
+    await promiseMethod("second");
+    await promiseMethod("third");
+})();
+
             `, function (err) {
                 if (err) { return done(err); }
 
